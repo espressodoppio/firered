@@ -118,7 +118,7 @@ void RunTextPrinters(void)
 
     do
     {
-        int numEmpty = 0;
+        int numEmptyTextPrinters = 0;
         for (i = 0; i < 0x20; ++i)
         {
             if (sTextPrinters[i].active != 0)
@@ -145,9 +145,13 @@ void RunTextPrinters(void)
             }
             else
             {
-                numEmpty++;
+                numEmptyTextPrinters++;
             }
-        }   
+        }  
+        if (numEmptyTextPrinters == 0x20)
+        {
+            return;
+        }
     }while(gSaveBlock2Ptr->optionsTextSpeed == OPTIONS_TEXT_SPEED_INSTANT);
     
 }

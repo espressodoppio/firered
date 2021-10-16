@@ -148,7 +148,7 @@ static const u8 *const sTextSpeedOptions[] =
 {
     gText_TextSpeedSlow, 
     gText_TextSpeedMid, 
-    gText_TextSpeedFast
+    gText_TextSpeedFast,
     gText_TextSpeedInstant
 };
 
