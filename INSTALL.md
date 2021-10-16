@@ -28,14 +28,14 @@ Install the **devkitARM** toolchain of [devkitPro](https://devkitpro.org/wiki/Ge
 
 To set up the repository:
 
-    git clone https://github.com/pret/pokefirered
+    git clone https://github.com/espressodoppio/firered
     git clone https://github.com/pret/agbcc
 
     cd ./agbcc
     sh build.sh
-    sh install.sh ../pokefirered
+    sh install.sh ../firered
 
-    cd ../pokefirered
+    cd ../firered
 
 To build **pokefirered.gba**:
 
