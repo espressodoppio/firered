@@ -16,6 +16,8 @@
 #include "constants/abilities.h"
 #include "constants/items.h"
 
+extern struct Evolution gEvolutionTable[][EVOS_PER_MON];
+
 struct WildEncounterData
 {
     u32 rngState;
@@ -156,23 +158,49 @@ static u8 ChooseWildMonIndex_Fishing(u8 rod)
 
 static u8 ChooseWildMonLevel(const struct WildPokemon * info)
 {
-    u8 lo;
-    u8 hi;
+    u8 lo = 100;
+    u8 hi = 2;
     u8 mod;
     u8 res;
-    if (info->maxLevel >= info->minLevel)
+    u8 i;
+
+    // Iterate through party to get max and min levels
+    for (i = 0; i < PARTY_SIZE; i++)
     {
-        lo = info->minLevel;
-        hi = info->maxLevel;
+        if (GetMonData(&gPlayerParty[i], MON_DATA_HP) && !GetMonData(&gPlayerParty[i], MON_DATA_IS_EGG))
+        {
+            u8 ourLevel = GetMonData(&gPlayerParty[i], MON_DATA_LEVEL) - 2;
+
+            if (ourLevel < lo)
+            {
+                lo = ourLevel;
+            }
+            if (ourLevel + 4 > hi)
+            {
+                hi = ourLevel + 4;
+            }
+        }
     }
-    else
-    {
-        lo = info->maxLevel;
-        hi = info->minLevel;
-    }
-    mod = hi - lo + 1;
+
+    lo = lo < info->minLevel ? info->minLevel : lo;
+    
+    mod = (hi + 2 < 100 ? hi : 100) - (lo > 2 ? lo : 2) + 1;
     res = Random() % mod;
     return lo + res;
+}
+
+static u16 ChooseWildMonSpecies(const u16 species, const u8 level)
+{
+    u8 i;
+
+    for (i = 0; i < 5; i++)
+    {
+        if (gEvolutionTable[species][i].method == EVO_LEVEL && level >= gEvolutionTable[species][i].param && Random() % 10 < 2)
+        {
+            return ChooseWildMonSpecies(gEvolutionTable[species][i].targetSpecies, level);
+        }
+    }
+    return species;
 }
 
 static u16 GetCurrentMapWildMonHeaderId(void)
@@ -232,7 +260,7 @@ static void GenerateWildMon(u16 species, u8 level, u8 slot)
     ZeroEnemyPartyMons();
     if (species != SPECIES_UNOWN)
     {
-        CreateMonWithNature(&gEnemyParty[0], species, level, 32, Random() % 25);
+        CreateMonWithNature(&gEnemyParty[0], ChooseWildMonSpecies(species, level), level, 32, Random() % 25);
     }
     else
     {
