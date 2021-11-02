@@ -44,6 +44,8 @@
 #include "constants/songs.h"
 #include "constants/trainer_classes.h"
 
+extern struct Evolution gEvolutionTable[][EVOS_PER_MON];
+
 static void SpriteCB_UnusedDebugSprite(struct Sprite *sprite);
 static void HandleAction_UseMove(void);
 static void HandleAction_Switch(void);
@@ -1516,11 +1518,85 @@ static void SpriteCB_UnusedDebugSprite_Step(struct Sprite *sprite)
     }
 }
 
+static u8 ChooseTrainerMonLevel(u8 defaultLevel)
+{
+    u8 level = defaultLevel;
+    u8 i;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (GetMonData(&gPlayerParty[i], MON_DATA_HP) && !GetMonData(&gPlayerParty[i], MON_DATA_IS_EGG))
+        {
+            u8 ourLevel = GetMonData(&gPlayerParty[i], MON_DATA_LEVEL);
+
+            if (ourLevel > level)
+            {
+                level = ourLevel;
+            }
+        }
+    }
+
+    return level;
+}
+
+static u16 ChooseTrainerMonSpecies(u16 species, u8 level)
+{
+    int i;
+    u16 newSpecies = species;
+    for (i = 0; i < 5; i++)
+    {
+        switch (gEvolutionTable[species][i].method)
+        {
+            case EVO_FRIENDSHIP:
+            case EVO_FRIENDSHIP_DAY:
+            case EVO_FRIENDSHIP_NIGHT:
+            case EVO_BEAUTY:
+            case EVO_TRADE:
+            case EVO_TRADE_ITEM:
+            case EVO_ITEM:
+                if (level >= 35)
+                {
+                    if (species == newSpecies)
+                    {
+                        newSpecies = gEvolutionTable[species][i].targetSpecies;
+                    }
+                    else
+                    {
+                        newSpecies = Random() % 2 ? gEvolutionTable[species][i].targetSpecies : newSpecies;
+                    }
+                }
+                break;
+            case EVO_LEVEL:
+            case EVO_LEVEL_ATK_GT_DEF:
+            case EVO_LEVEL_ATK_EQ_DEF:
+            case EVO_LEVEL_ATK_LT_DEF:
+            case EVO_LEVEL_SILCOON:
+            case EVO_LEVEL_CASCOON:
+            case EVO_LEVEL_NINJASK:
+                if (level >= gEvolutionTable[species][i].param)
+                {
+                    if (species == newSpecies)
+                    {
+                        newSpecies = gEvolutionTable[species][i].targetSpecies;
+                    }
+                    else
+                    {
+                        newSpecies = Random() % 2 ? gEvolutionTable[species][i].targetSpecies : newSpecies;
+                    }
+                }
+                break; 
+        }
+    }
+    return newSpecies == species ? newSpecies : ChooseTrainerMonSpecies(newSpecies, level);
+}
+
 static u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
 {
     u32 nameHash = 0;
     u32 personalityValue;
     u8 fixedIV;
+    u8 level;
+    u16 evolvedSpecies;
     s32 i, j;
 
     if (trainerNum == TRAINER_SECRET_BASE)
@@ -1531,7 +1607,6 @@ static u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
         ZeroEnemyPartyMons();
         for (i = 0; i < gTrainers[trainerNum].partySize; ++i)
         {
-
             if (gTrainers[trainerNum].doubleBattle == TRUE)
                 personalityValue = 0x80;
             else if (gTrainers[trainerNum].encounterMusic_gender & 0x80)
@@ -1545,23 +1620,25 @@ static u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
             case 0:
             {
                 const struct TrainerMonNoItemDefaultMoves *partyData = gTrainers[trainerNum].party.NoItemDefaultMoves;
-
-                for (j = 0; gSpeciesNames[partyData[i].species][j] != EOS; ++j)
-                    nameHash += gSpeciesNames[partyData[i].species][j];
+                level = ChooseTrainerMonLevel(partyData[i].lvl);
+                evolvedSpecies = ChooseTrainerMonSpecies(partyData[i].species, level);
+                for (j = 0; gSpeciesNames[evolvedSpecies][j] != EOS; ++j)
+                    nameHash += gSpeciesNames[evolvedSpecies][j];
                 personalityValue += nameHash << 8;
                 fixedIV = partyData[i].iv * 31 / 255;
-                CreateMon(&party[i], partyData[i].species, partyData[i].lvl, fixedIV, TRUE, personalityValue, OT_ID_RANDOM_NO_SHINY, 0);
+                CreateMon(&party[i], evolvedSpecies, level, fixedIV, TRUE, personalityValue, OT_ID_RANDOM_NO_SHINY, 0);
                 break;
             }
             case F_TRAINER_PARTY_CUSTOM_MOVESET:
             {
                 const struct TrainerMonNoItemCustomMoves *partyData = gTrainers[trainerNum].party.NoItemCustomMoves;
-
-                for (j = 0; gSpeciesNames[partyData[i].species][j] != EOS; ++j)
-                    nameHash += gSpeciesNames[partyData[i].species][j];
+                level = ChooseTrainerMonLevel(partyData[i].lvl);
+                evolvedSpecies = ChooseTrainerMonSpecies(partyData[i].species, level);
+                for (j = 0; gSpeciesNames[evolvedSpecies][j] != EOS; ++j)
+                    nameHash += gSpeciesNames[evolvedSpecies][j];
                 personalityValue += nameHash << 8;
                 fixedIV = partyData[i].iv * 31 / 255;
-                CreateMon(&party[i], partyData[i].species, partyData[i].lvl, fixedIV, TRUE, personalityValue, OT_ID_RANDOM_NO_SHINY, 0);
+                CreateMon(&party[i], evolvedSpecies, level, fixedIV, TRUE, personalityValue, OT_ID_RANDOM_NO_SHINY, 0);
                 for (j = 0; j < MAX_MON_MOVES; ++j)
                 {
                     SetMonData(&party[i], MON_DATA_MOVE1 + j, &partyData[i].moves[j]);
@@ -1572,12 +1649,13 @@ static u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
             case F_TRAINER_PARTY_HELD_ITEM:
             {
                 const struct TrainerMonItemDefaultMoves *partyData = gTrainers[trainerNum].party.ItemDefaultMoves;
-
-                for (j = 0; gSpeciesNames[partyData[i].species][j] != EOS; ++j)
-                    nameHash += gSpeciesNames[partyData[i].species][j];
+                level = ChooseTrainerMonLevel(partyData[i].lvl);
+                evolvedSpecies = ChooseTrainerMonSpecies(partyData[i].species, level);
+                for (j = 0; gSpeciesNames[evolvedSpecies][j] != EOS; ++j)
+                    nameHash += gSpeciesNames[evolvedSpecies][j];
                 personalityValue += nameHash << 8;
                 fixedIV = partyData[i].iv * 31 / 255;
-                CreateMon(&party[i], partyData[i].species, partyData[i].lvl, fixedIV, TRUE, personalityValue, OT_ID_RANDOM_NO_SHINY, 0);
+                CreateMon(&party[i], evolvedSpecies, level, fixedIV, TRUE, personalityValue, OT_ID_RANDOM_NO_SHINY, 0);
 
                 SetMonData(&party[i], MON_DATA_HELD_ITEM, &partyData[i].heldItem);
                 break;
@@ -1585,12 +1663,13 @@ static u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
             case F_TRAINER_PARTY_CUSTOM_MOVESET | F_TRAINER_PARTY_HELD_ITEM:
             {
                 const struct TrainerMonItemCustomMoves *partyData = gTrainers[trainerNum].party.ItemCustomMoves;
-
-                for (j = 0; gSpeciesNames[partyData[i].species][j] != EOS; ++j)
-                    nameHash += gSpeciesNames[partyData[i].species][j];
+                level = ChooseTrainerMonLevel(partyData[i].lvl);
+                evolvedSpecies = ChooseTrainerMonSpecies(partyData[i].species, level);
+                for (j = 0; gSpeciesNames[evolvedSpecies][j] != EOS; ++j)
+                    nameHash += gSpeciesNames[evolvedSpecies][j];
                 personalityValue += nameHash << 8;
                 fixedIV = partyData[i].iv * 31 / 255;
-                CreateMon(&party[i], partyData[i].species, partyData[i].lvl, fixedIV, TRUE, personalityValue, OT_ID_RANDOM_NO_SHINY, 0);
+                CreateMon(&party[i], evolvedSpecies, level, fixedIV, TRUE, personalityValue, OT_ID_RANDOM_NO_SHINY, 0);
                 SetMonData(&party[i], MON_DATA_HELD_ITEM, &partyData[i].heldItem);
                 for (j = 0; j < MAX_MON_MOVES; ++j)
                 {
